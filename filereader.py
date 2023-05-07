@@ -4,48 +4,34 @@ import time
 import datetime
 import sparktorch
 from pyspark import SparkConf, SparkContext
-from pyspark.serializers import MarshalSerializer
 from sparkjob import countpositives
-from lstmmodel import load_lstm, load_glove, apply_model
-import sys
+import re
 
-conf = SparkConf().setAll([('spark.executor.memory', '8g'), ('spark.executor.cores', '3'), ('spark.cores.max', '3'), ('spark.driver.memory','8g')])
-sc = SparkContext(conf=conf, serializer = MarshalSerializer())
+conf = SparkConf()
+        # .setAll([('spark.executor.memory', '8g'), ('spark.executor.cores', '3'), ('spark.cores.max', '3'), ('spark.driver.memory','8g')])
+sc = SparkContext(conf=conf)
 
-# spark = SparkSession.builder.appName("PySparkApp").getOrCreate()
-
-## Handle cold start
-
-FILE_SIZES = [10]*6 + [2**i for i in range(11, 22)]
+FILE_SIZES = [1024]*6 + [2**i for i in range(11, 22)]
 size_ind = 0
 
-output = []
+pattern = r"(\s*([\0\b\'\"\n\r\t\%\_\\]*\s*(((select\s*.+\s*from\s*.+)|(insert\s*.+\s*into\s*.+)|(update\s*.+\s*set\s*.+)|(delete\s*.+\s*from\s*.+)|(drop\s*.+)|(truncate\s*.+)|(alter\s*.+)|(exec\s*.+)|(\s*(all|any|not|and|between|in|like|or|some|contains|containsall|containskey)\s*.+[\=\>\<=\!\~]+.+)|(let\s+.+[\=]\s*.*)|(begin\s*.*\s*end)|(\s*[\/\*]+\s*.*\s*[\*\/]+)|(\s*(\-\-)\s*.*\s+)|(\s*(contains|containsall|containskey)\s+.*)))(\s*[\;]\s*)*)+)"
 
-lstm_model = load_lstm()
-glove_embeddings = load_glove()
-
-# def model(line):
-#     return 1 if 'select' in line else 0
+def model(line):
+    return 1 if re.search(pattern, line) else 0    
 
 def test_models(current, model, sc):
-    print(sc.getConf().getAll())
-    print(sys.getsizeof(glove_embeddings))
-    print(sys.getsizeof(lstm_model))
-
-    print(f"\trunning normally @ {datetime.datetime.fromtimestamp(time.time())}")
     t1 = time.time()
-    normal = sum(list(map(apply_model, current, [lstm_model]*len(current), [glove_embeddings]*len(current))))
-    print(f"\tnormal result : {normal}")
+    normal = sum(list(map(model, current)))
     t1 = time.time() - t1
 
-    print(f"\trunning on spark @ {datetime.datetime.fromtimestamp(time.time())}")
     t0 = time.time()
-    positives = countpositives(current, apply_model, lstm_model, glove_embeddings, sc)
+    positives = countpositives(current, model, sc)
     t0 = time.time() - t0
     total = positives.get(0, 0) + positives.get(1, 0)
     percentage = positives.get(1, 0) * 100 / total
     return t0, t1
 
+output = []
 with subprocess.Popen(['tail', '-F', 'web.log'], stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
     current = []
     while True:
@@ -54,7 +40,7 @@ with subprocess.Popen(['tail', '-F', 'web.log'], stdout=subprocess.PIPE, stderr=
             break
         current.append(line)
         if len(current) > FILE_SIZES[size_ind]:
-            t0, t1 = test_models(current, lstm_model, sc)
+            t0, t1 = test_models(current, model, sc)
             output.append((FILE_SIZES[size_ind], t0, t1))
             print(output[-1])
             current.clear()
