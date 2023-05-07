@@ -3,6 +3,9 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+.ipynb_checkpoints
+models/
+__pycache__
 .venv
 
 ### IntelliJ IDEA ###
