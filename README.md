@@ -1,6 +1,8 @@
 # sqli-log-analyser
 ### A project for CS553: Design of Internet Services, Spring 2023 at Rutgers University
 
+Project by Geet Rajendra Patel and [Jhanavi Behl](https://github.com/jhanaviB)
+
 ----
 
 This project uses Apache Spark and other helper libraries from python to implement a distributed 
